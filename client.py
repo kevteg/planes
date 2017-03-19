@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 import sys
 import os
@@ -9,14 +9,14 @@ import struct
 import json
 import random
 import string
-from comunication import getConnectioninfo, createMulticastSocket
+from comunication import getConnectionInfo, createMulticastSocket
 class client:
     def __init__(self, type):
         os.system("clear")
         self.str_plane_type = {0: 'take off', 1: 'landing'}
-        if type not in self.str_plane_type: 
-            self.plane_type = type
-            print('Managing airplanes ' + self.str_type[self.type])
+        if int(type) in list(self.str_plane_type.keys()): 
+            self.plane_type = int(type)
+            print('Managing airplanes ' + self.str_plane_type[self.plane_type])
             #Connecting
             self.receive_multicast_info = True
             group, self.MYPORT = getConnectionInfo("distributed")
@@ -32,7 +32,8 @@ class client:
             self.planes = []
             self.plane_creation_time = []
             self.plane_creation_time.append(2)
-            self.plane_creation_time.append(int(3 + random.choice(string.digits)))
+            self.plane_creation_time.append(int(3 + int(random.choice(string.digits))))
+            self.send = True
         else:
             print("Error: " + str(type) + " is not an option")
 
@@ -54,6 +55,14 @@ class client:
             self.planes.append(self.idGenerator())
             print("New plane waiting: " + self.planes[-1])
             time.sleep(random.randrange(self.plane_creation_time[0], self.plane_creation_time[1]))
+
+    def sendPlane(self):
+        while self.dowork:
+            time.sleep(random.randrange(self.plane_creation_time[0], self.plane_creation_time[1]))
+            if len(self.planes) and self.send:
+                info_to_send = json.dumps({"type": self.type, "plane": self.planes[0]})
+                self.sendToServer(data = info_to_send, visible = False, server = self.unicast_connected_to)
+
 
     def connectToTCPServer(self, address_to_connect):
         try:
@@ -88,8 +97,22 @@ class client:
     def checkData(self, data):
         try:
             data = json.loads(data)
-            if data["type"] == "begin":
-                
+            if data["state"] == "begin":
+               #Crear hilo que llame a la creación de aviones en la cola
+               plane_creator = threading.Thread(name='create_plane', target=self.addPlane)
+               plane_creator.start()
+               plane_creator.join(1)
+               #Crear hilo que envie el avión en [0] al servidor
+               plane_sender = threading.Thread(name='create_plane', target=self.sendPlane)
+               plane_sender.start()
+               plane_sender.join(1)
+            elif data["state"] == "OK":
+               print("✈  Plane " + self.planes[0] + " has " ("taken off" if not self.plane_type else "landed" ))
+               del self.planes[0]
+               self.send = True
+            elif data["state"] == "WAIT":
+               print("Control tower asking to wait")
+               self.send = False
                 
         except Exception as e:
             print(e)
@@ -101,11 +124,10 @@ class client:
             print ('Sending to server :', data)
         server.send(data.encode())
 
-
-
 if __name__ == "__main__":
     try:
-	    s = client(sys.argv[1])
+        s = client(sys.argv[1])
     except Exception as e:
         print(e)
+        print(sys.exc_info()[-1].tb_lineno)
         print("Usage: client.py")
