@@ -41,47 +41,49 @@ class server:
         for i in range(2):
             self.plane_state.append(False)
             self.time_to.append(int(3 + int(random.choice(string.digits))))
+        print("Time to take off: " + str(self.time_to[0]) + "s")
+        print("Time to land: " + str(self.time_to[1]) + "s")
+
         
     def send_information(self):
         while self.sendinfo:
             time.sleep(0.5)
             self.sendToGroup("Hi")
         print("Multicast: Sent finished ")
-        self.divide_work(0, self.number, len(self.unicast_connections))
 
     def planeLanding(self, plane, client):
         self.plane_state[0] = True
-        self.turn = 0
+        self.turn = 1
         #Aqui se le dice que espere
-        if self.plane_state[1] and self.turn == 0:
-            self.sendToClient(client = client, visible = False, data = json.dumps({"state": "WAIT"}))
+        print("✈ Plane " + plane + " wants to land!")
+        #if self.plane_state[1] and self.turn == 0:
+        self.sendToClient(client = client, visible = False, data = json.dumps({"state": "WAIT"}))
      
-        while self.plane_state[1] and self.turn == 0:
+        while self.plane_state[1] and self.turn == 1:
             pass
-        self.beOnLandingTrack(self.turn)
+        self.beOnLandingTrack(plane, "land")
         self.sendToClient(client = client, visible = False, data = json.dumps({"state": "OK"}))
-        print("Plane " + plane + " has landed!")
+        print("✈✈ Plane " + plane + " has landed!")
         self.plane_state[0] = False
-
 
     def planeTakeOff(self, plane, client):
         self.plane_state[1] = True
-        self.turn = 1
+        self.turn = 0
         #Aqui se le dice que espere
-        if self.plane_state[0] and self.turn == 1:
-            self.sendToClient(client = client, visible = False, data = json.dumps({"state": "WAIT"}))
+        print("✈ Plane " + plane + " wants to take off!")
+        #if self.plane_state[0] and self.turn == 1:
+        self.sendToClient(client = client, visible = False, data = json.dumps({"state": "WAIT"}))
      
-        while self.plane_state[0] and self.turn == 1:
+        while self.plane_state[0] and self.turn == 0:
             pass
-        self.beOnLandingTrack(self.turn)
+        self.beOnLandingTrack(plane, "take off")
         self.sendToClient(client = client, visible = False, data = json.dumps({"state": "OK"}))
-        print("Plane " + plane + " has taken off!")
+        print("✈✈ Plane " + plane + " has taken off!")
         self.plane_state[0] = False
-
 
     def changeWeather(self):
         self.current_weather = random.choice(list(self.climate_conditions.keys()))
-        print("\033[1;10H" + "Climate condition: " + self.current_weather)
+        print("☁ Climate condition changed: " + self.current_weather + " (" + str(self.climate_conditions[self.current_weather]) + "s)")
         return self.climate_conditions[self.current_weather]
 
     def waitTCPCLients(self, interface):
@@ -90,7 +92,6 @@ class server:
             self.tcp_socket = socket.socket(addr[0], socket.SOCK_STREAM)
             self.tcp_socket.bind(addr[-1])
             self.tcp_socket.listen(2)
-            self.unicast_connections.append(self.tcp_socket)
         except Exception as e:
             print("Error connecting")
             self.tcp_socket.close()
@@ -108,10 +109,10 @@ class server:
                 new_con.join(1)
                 ping_client.join(1)
                 if len(self.unicast_connections) == 2:
+                    print("Tower control opening")
                     self.sendinfo = False
                     for client in self.unicast_connections:
                         self.sendToClient(client = client, visible = False, data = json.dumps({"state": "begin"}))
-
             except Exception as e:
                 print(e)
                 self.waitclients = False
@@ -140,19 +141,20 @@ class server:
         print("Closing connection with gone client")
         client.close()
 
-    def beOnLandingTrack(self, type):
-        time.sleep(self.time_to[type] + self.changeWeather())
+    def beOnLandingTrack(self, plane, type):
+        print("Plane " + plane + " is on landing track to " + type + " " + str((self.time_to[self.turn] + self.changeWeather())) + "s")
+        time.sleep(self.time_to[self.turn] + self.changeWeather())
 
 
     def checkData(self, data, client):
         try:
             data = json.loads(data.decode())
-            if data["type"] == "0":
-                #Aterrizaje
-                self.planeLanding(client = client, plane = data["plane"]) 
-            elif data["type"] == "1":
-                #Despegue
+            if data["type"] == 0:
+                #Take off | despegue
                 self.planeTakeOff(client = client, plane = data["plane"]) 
+            elif data["type"] == 1:
+                #Landing | aterrizaje
+                self.planeLanding(client = client, plane = data["plane"]) 
         except Exception as e:
             print(e)
             print("Thats an error :(")

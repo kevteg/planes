@@ -53,16 +53,16 @@ class client:
     def addPlane(self):
         while self.dowork:
             self.planes.append(self.idGenerator())
-            print("New plane waiting: " + self.planes[-1])
+            print("New plane wants to " + ("land" if self.plane_type else "take off") + ": " + self.planes[-1])
             time.sleep(random.randrange(self.plane_creation_time[0], self.plane_creation_time[1]))
 
     def sendPlane(self):
         while self.dowork:
             time.sleep(random.randrange(self.plane_creation_time[0], self.plane_creation_time[1]))
             if len(self.planes) and self.send:
-                info_to_send = json.dumps({"type": self.type, "plane": self.planes[0]})
+                info_to_send = json.dumps({"type": self.plane_type, "plane": self.planes[0]})
+                print("Sending plane " + self.planes[0] + " to control-tower")
                 self.sendToServer(data = info_to_send, visible = False, server = self.unicast_connected_to)
-
 
     def connectToTCPServer(self, address_to_connect):
         try:
@@ -107,7 +107,7 @@ class client:
                plane_sender.start()
                plane_sender.join(1)
             elif data["state"] == "OK":
-               print("✈  Plane " + self.planes[0] + " has " ("taken off" if not self.plane_type else "landed" ))
+               print("✈  Plane " + self.planes[0] + " has " + ("taken off" if not self.plane_type else "landed" ))
                del self.planes[0]
                self.send = True
             elif data["state"] == "WAIT":
@@ -115,6 +115,7 @@ class client:
                self.send = False
                 
         except Exception as e:
+            print("Error on checkData")
             print(e)
             #self.sendToServer(self.unicast_connected_to, data, False)
 
@@ -122,7 +123,11 @@ class client:
     def sendToServer(self, server, data, visible = True):
         if visible:
             print ('Sending to server :', data)
-        server.send(data.encode())
+        try:
+            server.send(data.encode())
+        except Exception as e:
+            print("Error on sendToServer")
+            print(e)
 
 if __name__ == "__main__":
     try:
